@@ -1,0 +1,1096 @@
+<!doctype html>
+<html lang="tr" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SafeCheck - Alerji Takip</title>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+        body {
+            box-sizing: border-box;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        .slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-hover {
+            transition: all 0.2s ease;
+        }
+
+        .btn-hover:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-hover:active {
+            transform: scale(0.98);
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .glass-effect {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .menu-overlay {
+            transition: opacity 0.3s ease;
+        }
+
+        .menu-sidebar {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .kalp-btn {
+    width: 44px;
+    height: 44px;
+    background-color: #ffffff;
+    border: none;
+    cursor: pointer;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+        .kalp-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .fa-heart {
+            color: #cc7548;
+        }
+
+        .fa-regular.fa-heart {
+            color: #cc7548;
+        }
+
+        .fa-solid.fa-heart {
+            color: #cc7548;
+        }
+        
+    </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full">
+  <div id="app" class="w-full h-full overflow-auto"></div>
+  <script>
+
+
+  const loggedInUser = {
+    name: localStorage.getItem("user_name"),
+    email: localStorage.getItem("user_email"),
+    token: localStorage.getItem("token")
+
+};
+
+
+
+if (!loggedInUser.token) {
+    window.location.href = "login.html";
+}
+
+
+
+    let products = [];
+    
+
+    let favorites = JSON.parse(localStorage.getItem("favorites")) || [];
+
+
+fetch("http://localhost:8080/api/products")
+  .then(res => res.json())
+  .then(data => {
+      products = data;   // ✅ GLOBAL
+      
+  })
+  .catch(err => console.error(err));
+
+
+
+
+
+const defaultConfig = {
+    app_title: "SafeCheck",
+    user_name: loggedInUser.name && loggedInUser.name.trim() !== "" 
+    ? loggedInUser.name 
+    : "Kullanıcı",
+    user_email: loggedInUser.email || "",
+    background_color: "#0F172A",
+    surface_color: "#1E293B",
+    accent_color: "#8B5CF6",
+    text_color: "#F1F5F9",
+    warning_color: "#F97316",
+    font_family: "Inter",
+    font_size: 16
+};
+
+
+        let currentPage = 'home';
+        let menuOpen = false;
+        let allergies = [];
+        let searchQuery = '';
+        let selectedProduct = null;
+        let selectedCategory = 'Tümü';
+        let favoriteProductIds = [];
+
+
+
+
+        function render() {
+            const config = window.elementSdk?.config || defaultConfig;
+            const baseFontSize = config.font_size || defaultConfig.font_size;
+            const customFont = config.font_family || defaultConfig.font_family;
+            const fontStack = `${customFont}, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <!-- Menu Overlay -->
+                <div id="menuOverlay" class="menu-overlay fixed inset-0 bg-black bg-opacity-60 z-40 ${menuOpen ? '' : 'hidden'}" onclick="toggleMenu()"></div>
+
+                <!-- Menu Sidebar -->
+                <div id="menuSidebar" class="menu-sidebar fixed top-0 left-0 h-full w-80 z-50 shadow-2xl ${menuOpen ? 'slide-in' : '-translate-x-full'}" style="background: linear-gradient(180deg, ${config.surface_color} 0%, ${config.background_color} 100%);">
+                    <div class="p-6">
+                        <!-- Menu User Info -->
+                        <div class="flex items-center gap-4 mb-8 pb-6 border-b-2" style="border-color: ${config.accent_color}40;">
+                            <div class="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold shadow-lg" style="background: linear-gradient(135deg, ${config.accent_color}, ${config.warning_color}); color: ${config.background_color};">
+                                ${config.user_name ? config.user_name.charAt(0) : "?"}
+                            </div>
+                            <div>
+                                <div style="font-size: ${baseFontSize * 1.125}px; font-weight: 700; color: ${config.text_color}; font-family: ${fontStack};">${config.user_name}</div>
+                                <div style="font-size: ${baseFontSize * 0.875}px; color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack};">${config.user_email}</div>
+                            </div>
+                        </div>
+
+                        <!-- Menu Items -->
+                        <nav class="space-y-2">
+                            ${[
+                                { id: 'home', icon: '🏠', label: 'Ana Sayfa' },
+                                { id: 'search', icon: '🔍', label: 'Ürün Ara' },
+                                { id: 'barcode', icon: '📷', label: 'Barkod Oku' },
+                                { id: 'profile', icon: '👤', label: 'Profilim' },
+                                { id: 'unsafe', icon: '⚠️', label: 'Güvensiz Ürünler' },
+                                { id: 'favorites', icon: '❤️', label: 'Favorilerim' },
+                                { id: 'history', icon: '🕐', label: 'Tarama Geçmişi' }
+                            ].map(item => `
+                                <button onclick="navigateTo('${item.id}')" class="w-full text-left px-4 py-3 rounded-xl transition-all ${currentPage === item.id ? 'shadow-lg' : ''}" style="color: ${config.text_color}; background-color: ${currentPage === item.id ? config.accent_color : 'transparent'}; font-size: ${baseFontSize}px; font-weight: ${currentPage === item.id ? '600' : '400'}; font-family: ${fontStack};">
+                                    <span style="font-size: ${baseFontSize * 1.25}px;">${item.icon}</span> ${item.label}
+                                </button>
+                            `).join('')}
+                            
+                            <div class="pt-4 mt-4" style="border-top: 2px solid ${config.accent_color}40;">
+                                <button onclick="logout()" class="w-full text-left px-4 py-3 rounded-xl transition-all" style="color: ${config.warning_color}; font-size: ${baseFontSize}px; font-weight: 600; font-family: ${fontStack};">
+                                    <span style="font-size: ${baseFontSize * 1.25}px;">🚪</span> Çıkış Yap
+                                </button>
+                            </div>
+                        </nav>
+                    </div>
+                </div>
+
+                <!-- Main Content -->
+                <div class="w-full h-full flex flex-col" style="background-color: ${config.background_color};">
+                    <!-- Header -->
+                    <header class="shadow-xl" style="background: linear-gradient(135deg, ${config.accent_color}, ${config.warning_color});">
+                        <div class="flex items-center justify-between px-6 py-5">
+                            <button onclick="toggleMenu()" class="text-3xl btn-hover" style="color: ${config.background_color};">
+                                ☰
+                            </button>
+                            <h1 style="font-size: ${baseFontSize * 1.75}px; font-weight: 800; color: ${config.background_color}; font-family: ${fontStack}; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                ${config.app_title}
+                            </h1>
+                            <div class="flex items-center gap-3">
+                                <span style="font-size: ${baseFontSize}px; font-weight: 600; color: ${config.background_color}; font-family: ${fontStack};">
+                                    ${config.user_name}
+                                </span>
+                                <div class="w-10 h-10 rounded-full flex items-center justify-center shadow-lg" style="background-color: ${config.background_color}; color: ${config.accent_color}; font-size: ${baseFontSize}px; font-weight: 700; font-family: ${fontStack};">
+                                    ${config.user_name ? config.user_name.charAt(0) : "?"}
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <!-- Page Content -->
+                    <main class="flex-1 overflow-auto">
+                        ${getPageContent(config, baseFontSize, fontStack)}
+                    </main>
+                </div>
+            `;
+        }
+
+        function getPageContent(config, baseFontSize, fontStack) {
+            switch(currentPage) {
+                case 'home':
+                    return `
+                        <div class="p-6">
+                            <div class="max-w-6xl mx-auto">
+                                <!-- Hero Section -->
+                                <div class="rounded-3xl shadow-2xl p-10 mb-8 fade-in" style="background: linear-gradient(135deg, ${config.accent_color}, ${config.warning_color});">
+                                    <h2 style="font-size: ${baseFontSize * 2.5}px; font-weight: 800; color: ${config.background_color}; margin-bottom: 16px; font-family: ${fontStack};">
+                                        Hoş Geldiniz! 👋
+                                    </h2>
+                                    <p style="font-size: ${baseFontSize * 1.25}px; color: ${config.background_color}; opacity: 0.95; font-family: ${fontStack};">
+                                        Alerjilerinizi güvenle takip edin, ürünleri tarayın ve size uygun olanları kolayca bulun.
+                                    </p>
+                                </div>
+
+                                <!-- Action Cards -->
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                                    ${[
+                                        { page: 'search', icon: '🔍', title: 'Ürün Ara', desc: 'Binlerce üründen size uygun olanı bulun', color: config.accent_color },
+                                        { page: 'barcode', icon: '📷', title: 'Barkod Oku', desc: 'Hızlıca ürün bilgilerini öğrenin', color: config.warning_color },
+                                        { page: 'profile', icon: '👤', title: 'Profilim', desc: 'Alerjilerinizi yönetin', color: config.accent_color }
+                                    ].map(card => `
+                                        <button onclick="navigateTo('${card.page}')" class="card-hover rounded-2xl shadow-xl p-8 text-center" style="background-color: ${config.surface_color};">
+                                            <div style="font-size: ${baseFontSize * 4}px; margin-bottom: 16px;">${card.icon}</div>
+                                            <h3 style="font-size: ${baseFontSize * 1.5}px; font-weight: 700; color: ${card.color}; margin-bottom: 12px; font-family: ${fontStack};">${card.title}</h3>
+                                            <p style="font-size: ${baseFontSize}px; color: ${config.text_color}; opacity: 0.8; font-family: ${fontStack};">${card.desc}</p>
+                                        </button>
+                                    `).join('')}
+                                </div>
+
+                                <!-- Stats Section -->
+                                <div class="rounded-3xl shadow-2xl p-8" style="background-color: ${config.surface_color};">
+                                    <h3 style="font-size: ${baseFontSize * 1.75}px; font-weight: 700; color: ${config.accent_color}; margin-bottom: 24px; font-family: ${fontStack};">📊 İstatistikler</h3>
+                                    <div class="grid grid-cols-3 gap-6">
+                                        ${[
+                                            { value: '0', label: 'Taranan Ürün', color: config.accent_color },
+                                            { value: allergies.length.toString(), label: 'Alerji', color: config.warning_color },
+                                            { value: '0', label: 'Favori', color: config.accent_color }
+                                        ].map(stat => `
+                                            <div class="text-center p-6 rounded-2xl card-hover" style="background-color: ${config.background_color};">
+                                                <div style="font-size: ${baseFontSize * 3}px; font-weight: 800; color: ${stat.color}; margin-bottom: 8px; font-family: ${fontStack};">${stat.value}</div>
+                                                <div style="font-size: ${baseFontSize}px; color: ${config.text_color}; opacity: 0.8; font-weight: 600; font-family: ${fontStack};">${stat.label}</div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                case 'search':
+                    let filteredProducts = products;
+
+                    
+                    if (searchQuery) {
+                        filteredProducts = filteredProducts.filter(p => 
+                            p.brand?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+
+                        );
+                    }
+                    
+                    if (selectedCategory && selectedCategory !== 'Tümü') {
+                        filteredProducts = filteredProducts.filter(p =>
+                            p.categories?.some(c => c.name === selectedCategory)
+                       );
+
+                    }
+                    
+                    const categories = [
+                      'Tümü',
+                      ...new Set(
+                    products.flatMap(p => p.categories?.map(c => c.name) || [])
+             )
+         ];
+
+
+                    
+                    return `
+                        <div class="p-6">
+                            <div class="max-w-6xl mx-auto">
+                                <!-- Search Bar -->
+                                <div class="mb-6">
+                                    <input 
+                                        type="text" 
+                                        id="searchInput"
+                                        placeholder="🔍 Ürün veya marka ara..." 
+                                        class="w-full px-8 py-5 rounded-2xl shadow-xl outline-none"
+                                        style="background-color: ${config.surface_color}; color: ${config.text_color}; font-size: ${baseFontSize * 1.25}px; font-family: ${fontStack}; border: 3px solid ${config.accent_color};"
+                                        value="${searchQuery}"
+                                        oninput="handleSearch(this.value)"
+                                    >
+                                </div>
+
+                                <!-- Category Filter -->
+                                <div class="mb-8">
+                                    <div class="flex flex-wrap gap-3">
+                                        ${categories.map(category => {
+                                            const isActive = (selectedCategory || 'Tümü') === category;
+                                            return `
+                                                <button 
+                                                    onclick="filterByCategory('${category}')" 
+                                                    class="px-6 py-3 rounded-xl btn-hover shadow-lg transition-all"
+                                                    style="
+                                                        background-color: ${isActive ? config.accent_color : config.surface_color}; 
+                                                        color: ${isActive ? config.background_color : config.text_color}; 
+                                                        font-size: ${baseFontSize}px; 
+                                                        font-weight: ${isActive ? '700' : '600'}; 
+                                                        font-family: ${fontStack};
+                                                        border: 2px solid ${isActive ? config.accent_color : 'transparent'};
+                                                    "
+                                                >
+                                                    ${category}
+                                                </button>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                </div>
+
+<!-- Products Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+    ${filteredProducts.map(product => {
+        const hasUnsafeAllergen = product.containsGluten === true;
+
+        return `
+            <div class="card-hover rounded-2xl shadow-2xl overflow-hidden"
+                 style="background-color: ${config.surface_color};">
+
+                <div class="relative w-full h-56 flex items-center justify-center"
+     style="background: linear-gradient(135deg, ${config.accent_color}40, ${config.warning_color}40); font-size: 80px;">
+
+    📦
+</div>
+
+
+                <div class="p-6">
+
+                    <h3 style="font-size: ${baseFontSize * 1.25}px; font-weight: 700; color: ${config.text_color}; margin-bottom: 8px;">
+                        ${product.brand?.name ?? ""} ${product.name}
+                    </h3>
+
+                    <p style="
+                        font-size: ${baseFontSize * 1.1}px;
+                        color: #9CA3AF;
+                        margin-bottom: 16px;
+                        font-weight: 500;
+                ">
+                        ${product.categories?.map(c => c.name).join(", ") ?? ""}
+                    </p>
+
+
+
+
+
+                    <button onclick="viewProductDetail(${product.id})"
+                        class="w-full py-3 rounded-xl btn-hover shadow-lg"
+                        style="background: linear-gradient(135deg, ${config.accent_color}, ${config.warning_color});">
+                        Detay Gör
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('')}
+`;
+
+
+                case 'barcode':
+                    return `
+                        <div class="p-6">
+                            <div class="max-w-2xl mx-auto">
+                                <div class="rounded-3xl shadow-2xl p-10" style="background-color: ${config.surface_color};">
+                                    <div class="text-center mb-10">
+                                        <div style="font-size: ${baseFontSize * 6}px; margin-bottom: 24px;">📷</div>
+                                        <h2 style="font-size: ${baseFontSize * 2.25}px; font-weight: 800; color: ${config.accent_color}; margin-bottom: 12px; font-family: ${fontStack};">Barkod Oku</h2>
+                                        <p style="font-size: ${baseFontSize * 1.125}px; color: ${config.text_color}; opacity: 0.8; font-family: ${fontStack};">Barkod numarasını girin veya tarayın</p>
+                                    </div>
+                                    
+                                    <form onsubmit="scanBarcode(event)" class="space-y-6">
+                                        <input 
+                                            type="text" 
+                                            id="barcodeInput"
+                                            placeholder="Barkod numarası" 
+                                            class="w-full px-6 py-5 rounded-2xl shadow-lg outline-none"
+                                            style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFontSize * 1.25}px; font-family: ${fontStack}; border: 3px solid ${config.accent_color};"
+                                            pattern="[0-9]*"
+                                        >
+                                        <button 
+                                            type="submit"
+                                            class="w-full py-5 rounded-2xl shadow-xl btn-hover"
+                                            style="background: linear-gradient(135deg, ${config.accent_color}, ${config.warning_color}); color: ${config.background_color}; font-size: ${baseFontSize * 1.25}px; font-weight: 700; font-family: ${fontStack};"
+                                        >
+                                            🔍 Tara
+                                        </button>
+                                    </form>
+
+                                    <div id="scanResult" class="mt-8"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                case 'profile':
+                    return `
+                        <div class="p-6">
+                            <div class="max-w-3xl mx-auto">
+                                <!-- Profile Card -->
+                                <div class="rounded-3xl shadow-2xl p-10 mb-8 fade-in" style="background: linear-gradient(135deg, ${config.accent_color}, ${config.warning_color});">
+                                    <div class="flex items-center gap-6">
+                                        <div class="w-28 h-28 rounded-full flex items-center justify-center shadow-2xl" style="background-color: ${config.background_color}; color: ${config.accent_color}; font-size: ${baseFontSize * 3}px; font-weight: 800; font-family: ${fontStack};">
+                                            ${config.user_name ? config.user_name.charAt(0) : "?"}
+                                        </div>
+                                        <div>
+                                            <h2 style="font-size: ${baseFontSize * 2}px; font-weight: 800; color: ${config.background_color}; margin-bottom: 8px; font-family: ${fontStack};">${config.user_name}</h2>
+                                            <p style="font-size: ${baseFontSize * 1.125}px; color: ${config.background_color}; opacity: 0.9; font-family: ${fontStack};">${config.user_email}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Allergies Section -->
+                                <div class="rounded-3xl shadow-2xl p-10" style="background-color: ${config.surface_color};">
+                                    <h3 style="font-size: ${baseFontSize * 1.75}px; font-weight: 800; color: ${config.accent_color}; margin-bottom: 24px; font-family: ${fontStack};">🛡️ Alerjilerim</h3>
+                                    
+                                    <form onsubmit="addAllergy(event)" class="mb-8">
+                                        <div class="flex gap-4">
+                                            <input 
+                                                type="text" 
+                                                id="allergyInput"
+                                                placeholder="Yeni alerji ekle..." 
+                                                class="flex-1 px-6 py-4 rounded-2xl shadow-lg outline-none"
+                                                style="background-color: ${config.background_color}; color: ${config.text_color}; font-size: ${baseFontSize * 1.125}px; font-family: ${fontStack}; border: 3px solid ${config.accent_color};"
+                                            >
+                                            <button 
+                                                type="submit"
+                                                class="px-8 py-4 rounded-2xl shadow-lg btn-hover"
+                                                style="background: linear-gradient(135deg, ${config.accent_color}, ${config.warning_color}); color: ${config.background_color}; font-size: ${baseFontSize * 1.125}px; font-weight: 700; font-family: ${fontStack};"
+                                            >
+                                                ➕ Ekle
+                                            </button>
+                                        </div>
+                                    </form>
+
+                                    <div class="flex flex-wrap gap-4">
+    ${allergies.length > 0 ? allergies.map(allergy => `
+        <div class="btn-hover flex items-center gap-3 px-6 py-3 rounded-full shadow-lg"
+             style="
+                background-color: ${config.warning_color};
+                color: ${config.background_color};
+                font-size: ${baseFontSize * 1.125}px;
+                font-weight: 700;
+                font-family: ${fontStack};
+             ">
+             
+            <!-- ✅ ALERJİ ADI -->
+            <span>${allergy.allergy.name}</span>
+
+
+            <!-- ❌ SİL (şimdilik sadece frontend) -->
+            <button onclick="removeAllergy(${allergy.id})"
+                class="w-7 h-7 rounded-full flex items-center justify-center"
+                style="background-color: ${config.background_color}20; font-size: ${baseFontSize * 1.25}px;">
+                ×
+            </button>
+        </div>
+    `).join('') : `
+        <div class="w-full text-center py-12 rounded-2xl"
+             style="background-color: ${config.background_color}40;">
+            <p style="color: ${config.text_color}; opacity: 0.6;
+                      font-size: ${baseFontSize * 1.125}px;
+                      font-family: ${fontStack};">
+                Henüz alerji eklenmedi
+            </p>
+        </div>
+    `}
+</div>
+
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                case 'unsafe':
+                    return `
+                        <div class="p-6">
+                            <div class="max-w-4xl mx-auto">
+                                <div class="rounded-3xl shadow-2xl p-16 text-center" style="background-color: ${config.surface_color};">
+                                    <div style="font-size: ${baseFontSize * 5}px; margin-bottom: 24px;">⚠️</div>
+                                    <h2 style="font-size: ${baseFontSize * 2.25}px; font-weight: 800; color: ${config.text_color}; margin-bottom: 16px; font-family: ${fontStack};">Güvensiz Ürünlerim</h2>
+                                    <p style="font-size: ${baseFontSize * 1.125}px; color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack};">Alerjileriniz nedeniyle dikkat etmeniz gereken ürünler</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                case 'favorites':
+                    return `
+                        <div class="p-6">
+                            <div class="max-w-4xl mx-auto">
+                                <div class="rounded-3xl shadow-2xl p-16 text-center" style="background-color: ${config.surface_color};">
+                                    <div style="font-size: ${baseFontSize * 5}px; margin-bottom: 24px;">❤️</div>
+                                    <h2 style="font-size: ${baseFontSize * 2.25}px; font-weight: 800; color: ${config.text_color}; margin-bottom: 16px; font-family: ${fontStack};">Favori Ürünlerim</h2>
+                                    <p style="font-size: ${baseFontSize * 1.125}px; color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack};">Beğendiğiniz ve sık kullandığınız ürünler</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                case 'history':
+                    return `
+                        <div class="p-6">
+                            <div class="max-w-4xl mx-auto">
+                                <div class="rounded-3xl shadow-2xl p-16 text-center" style="background-color: ${config.surface_color};">
+                                    <div style="font-size: ${baseFontSize * 5}px; margin-bottom: 24px;">🕐</div>
+                                    <h2 style="font-size: ${baseFontSize * 2.25}px; font-weight: 800; color: ${config.text_color}; margin-bottom: 16px; font-family: ${fontStack};">Tarama Geçmişi</h2>
+                                    <p style="font-size: ${baseFontSize * 1.125}px; color: ${config.text_color}; opacity: 0.7; font-family: ${fontStack};">Daha önce taradığınız tüm ürünler</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                case 'productDetail':
+                    if (!selectedProduct) return '';
+                    
+                    const isRisky = selectedProduct.riskResult?.risky ?? false;
+                    const isSafe = !isRisky;
+
+                    
+                    return `
+                        <div class="p-6">
+                            <div class="max-w-4xl mx-auto">
+                                <button onclick="navigateTo('search')" class="mb-6 w-12 h-12 flex items-center justify-center rounded-full btn-hover shadow-lg" style="background-color: ${config.surface_color}; color: ${config.text_color}; font-size: ${baseFontSize * 1.5}px;">
+                                    ←
+                                </button>
+
+                                <div class="rounded-3xl shadow-2xl overflow-hidden" style="background-color: ${config.surface_color};">
+                                    <div class="relative w-full h-96 flex items-center justify-center"
+     style="background: linear-gradient(135deg, ${config.accent_color}40, ${config.warning_color}40); font-size: 140px;">
+
+    <!-- ❤️ DETAY SAYFASI KALP -->
+    <button type="button"
+        class="kalp-btn absolute top-4 right-4 z-10"
+        onclick="toggleFavorite(event, ${selectedProduct.id})">
+        <i class="${isFavorite(selectedProduct.id) ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
+    </button>
+
+    📦
+</div>
+
+
+                                    <div class="p-8 text-center" style="background: linear-gradient(135deg, ${isSafe ? config.accent_color : config.warning_color}, ${isSafe ? config.warning_color : '#DC2626'});">
+                                        <div style="font-size: ${baseFontSize * 4}px; color: ${config.background_color}; margin-bottom: 12px;">
+                                            ${isRisky ? '⚠️' : '✓'}
+                                        </div>
+                                        <h3 style="font-size: ${baseFontSize * 2.25}px; font-weight: 800; color: ${config.background_color}; font-family: ${fontStack};">
+                                            ${isRisky ? 'RİSKLİ' : 'GÜVENLİ'}
+                                        </h3>
+                                        ${isRisky ? `
+                                            <p style="margin-top:12px">
+                                                Bu ürün şu alerjileri tetikliyor:
+                                                <b>${selectedProduct.riskResult?.triggeredAllergies?.join(", ") ?? ""}</b>
+                                            </p>
+                                     ` : ''}
+
+                                    </div>
+
+                                    <div class="p-10">
+                                        <h2 style="font-size: ${baseFontSize * 2.25}px; font-weight: 800; color: ${config.text_color}; margin-bottom: 32px; font-family: ${fontStack};">
+                                            ${selectedProduct.name}
+                                        </h2>
+
+                                        <div class="grid grid-cols-2 gap-6 mb-10 p-6 rounded-2xl" style="background-color: ${config.background_color};">
+                                            <div>
+                                                <span style="font-size: ${baseFontSize}px; font-weight: 700; color: ${config.accent_color}; font-family: ${fontStack};">Marka</span>
+                                                <p style="font-size: ${baseFontSize * 1.125}px; color: ${config.text_color}; font-family: ${fontStack}; margin-top: 4px;">${selectedProduct.brand?.name ?? ""}</p>
+                                            </div>
+                                            <div>
+                                                <span style="font-size: ${baseFontSize}px; font-weight: 700; color: ${config.accent_color}; font-family: ${fontStack};">Kategori</span>
+                                                <p style="font-size: ${baseFontSize * 1.125}px; color: ${config.text_color}; font-family: ${fontStack}; margin-top: 4px;">${selectedProduct.categories?.map(c => c.name).join(", ") ?? ""}</p>
+                                            </div>
+                                        </div>
+
+
+
+                                        <div>
+                                            <h3 style="font-size: ${baseFontSize * 1.5}px; font-weight: 800; color: ${config.accent_color}; margin-bottom: 16px; font-family: ${fontStack};">📋 İÇİNDEKİLER</h3>
+                                            <div class="p-6 rounded-2xl space-y-3" style="background-color: ${config.background_color};">
+                                                ${(selectedProduct.ingredients || []).map((ingredient, index) => `
+
+                                                    <div class="flex items-start gap-3">
+                                                        <span style="color: ${config.accent_color}; font-size: ${baseFontSize * 1.125}px; font-weight: 700; font-family: ${fontStack};">•</span>
+                                                        <p style="font-size: ${baseFontSize * 1.0625}px; color: ${config.text_color}; line-height: 1.6; font-family: ${fontStack};">
+                                                            ${ingredient.name}
+                                                        </p>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                default:
+                    return `
+                        <div class="p-6">
+                            <div class="max-w-3xl mx-auto">
+                                <div class="rounded-3xl shadow-2xl p-16 text-center" style="background: linear-gradient(135deg, ${config.accent_color}, ${config.warning_color});">
+                                    <div style="font-size: ${baseFontSize * 6}px; margin-bottom: 24px;">🚀</div>
+                                    <h2 style="font-size: ${baseFontSize * 2.5}px; font-weight: 800; color: ${config.background_color}; font-family: ${fontStack};">Çok Yakında!</h2>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+            }
+        }
+
+        function toggleMenu() {
+            menuOpen = !menuOpen;
+            render();
+        }
+
+        function navigateTo(page) {
+            currentPage = page;
+            menuOpen = false;
+
+            // 🔥 PROFİLE GİRERKEN ALERJİLERİ YENİDEN ÇEK
+            if (page === 'profile') {
+               loadAllergies();
+            }
+            render();
+        }
+
+
+
+async function viewProductDetail(productId) {
+    try {
+        const userId = localStorage.getItem("userId");
+        if (!userId) {
+            alert("Kullanıcı bulunamadı");
+            return;
+        }
+
+        console.log("🔍 Aranan productId:", productId);
+        console.log("👤 userId:", userId);
+
+        selectedProduct = products.find(p => p.id === productId);
+        if (!selectedProduct) {
+            alert("Ürün bulunamadı");
+            return;
+        }
+
+        const url = `http://localhost:8080/api/scanner/product/${productId}/user/${userId}`;
+        console.log("➡️ Risk URL:", url);
+
+        const res = await fetch(url);
+        console.log("📡 Risk response status:", res.status);
+
+        if (!res.ok) throw new Error("Risk servisi hata döndü");
+
+        selectedProduct.riskResult = await res.json();
+        console.log("✅ Risk sonucu:", selectedProduct.riskResult);
+
+        currentPage = 'productDetail';
+        render();
+
+    } catch (err) {
+        console.error("❌ Detay sayfası hatası:", err);
+        alert("Detaylar yüklenemedi");
+    }
+}
+
+
+
+
+
+
+
+
+
+        function handleSearch(query) {
+            searchQuery = query;
+            render();
+        }
+
+        function filterByCategory(category) {
+            selectedCategory = category;
+            render();
+        }
+
+async function addAllergy(event) {
+    event.preventDefault();
+
+    const input = document.getElementById("allergyInput");
+    const allergyName = input.value.trim();
+    if (!allergyName) return;
+
+    const userId = localStorage.getItem("userId");
+    if (!userId) {
+        alert("Kullanıcı bulunamadı");
+        return;
+    }
+
+    try {
+        const response = await fetch("http://localhost:8080/api/user-allergies", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                userId: Number(userId),
+                allergyName: allergyName,
+                severity: "HIGH",
+                notes: ""
+            })
+        });
+
+        if (!response.ok) throw new Error();
+
+        input.value = "";
+        loadAllergies();
+        alert("✅ Alerji eklendi");
+
+    } catch (err) {
+        alert("❌ Alerji eklenemedi");
+        console.error(err);
+    }
+}
+
+
+
+
+
+async function loadAllergies() {
+    const userId = localStorage.getItem("userId");
+    if (!userId) return;
+
+    try {
+        const res = await fetch(`http://localhost:8080/api/user-allergies/user/${userId}`);
+        const data = await res.json();
+
+        // 🔥 ASIL OLAY BURASI
+        allergies = data;
+        render();
+
+    } catch (err) {
+        console.error("Alerjiler yüklenemedi", err);
+    }
+}
+
+
+async function loadFavorites() {
+    const userId = localStorage.getItem("userId");
+    if (!userId) return;
+
+    try {
+        const res = await fetch(`http://localhost:8080/api/favorites/user/${userId}`);
+        favoriteProductIds = await res.json(); // [1, 5, 9]
+    } catch (err) {
+        console.error("Favoriler yüklenemedi", err);
+    }
+}
+
+function isFavorite(productId) {
+    return favoriteProductIds.includes(productId);
+}
+
+
+async function toggleFavorite(event, productId) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const userId = localStorage.getItem("userId");
+    if (!userId) return;
+
+    try {
+        if (isFavorite(productId)) {
+            // ❌ FAVORİDEN ÇIKAR
+            await fetch("http://localhost:8080/api/favorites", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userId: Number(userId),
+                    productId: Number(productId)
+                })
+            });
+
+            favoriteProductIds = favoriteProductIds.filter(id => id !== productId);
+
+        } else {
+            // ✅ FAVORİYE EKLE
+            await fetch("http://localhost:8080/api/favorites", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userId: Number(userId),
+                    productId: Number(productId)
+                })
+            });
+
+            favoriteProductIds.push(productId);
+        }
+
+        render();
+
+    } catch (err) {
+        console.error("Favori işlemi başarısız", err);
+        alert("Favori kaydedilemedi");
+    }
+}
+
+
+
+
+async function removeAllergy(allergyId) {
+    if (!confirm("Bu alerjiyi silmek istiyor musun?")) return;
+
+    try {
+        const res = await fetch(`http://localhost:8080/api/user-allergies/${allergyId}`, {
+            method: "DELETE"
+        });
+
+        if (!res.ok) throw new Error();
+
+        // 🔄 tekrar backend’den çek
+        loadAllergies();
+
+    } catch (err) {
+        alert("❌ Alerji silinemedi");
+        console.error(err);
+    }
+}
+
+
+
+
+
+
+        function scanBarcode(event) {
+    event.preventDefault();
+
+    const input = document.getElementById('barcodeInput');
+    const barcode = input.value.trim();
+    const resultDiv = document.getElementById('scanResult');
+
+    const config = window.elementSdk?.config || defaultConfig;
+    const baseFontSize = config.font_size || defaultConfig.font_size;
+    const fontStack = `${config.font_family || defaultConfig.font_family}, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+
+    if (!barcode) return;
+
+    fetch(`http://localhost:8080/api/products/barcode/${barcode}`)
+        .then(res => {
+            if (!res.ok) throw new Error("Ürün bulunamadı");
+            return res.json();
+        })
+        .then(product => {
+            // 🔥 Bulunan ürünü global listeye ekle (detay sayfası için)
+            selectedProduct = product;
+
+            resultDiv.innerHTML = `
+                <div class="p-6 rounded-2xl shadow-lg" style="background-color: ${config.accent_color};">
+                    <p style="font-size: ${baseFontSize * 1.125}px; color: ${config.background_color}; font-weight: 700;">
+                        ✓ Ürün bulundu!
+                    </p>
+
+                    <p style="font-size: ${baseFontSize}px; color: ${config.background_color}; margin-top: 8px;">
+                        ${product.brand?.name ?? ""} ${product.name}
+                    </p>
+
+                    <button onclick="navigateTo('productDetail')"
+                        class="mt-4 w-full py-3 rounded-xl btn-hover"
+                        style="background-color: ${config.background_color}; color: ${config.accent_color}; font-weight: 700;">
+                        Detay Gör
+                    </button>
+                </div>
+            `;
+        })
+        .catch(() => {
+            resultDiv.innerHTML = `
+                <div class="p-6 rounded-2xl shadow-lg" style="background-color: ${config.warning_color};">
+                    <p style="font-size: ${baseFontSize * 1.125}px; color: ${config.background_color}; font-weight: 700;">
+                        ⚠️ Ürün bulunamadı
+                    </p>
+                    <p style="font-size: ${baseFontSize}px; color: ${config.background_color}; margin-top: 8px;">
+                        Barkod: ${barcode}
+                    </p>
+                </div>
+            `;
+        });
+}
+
+
+
+
+async function checkProductRisk(productId) {
+    const userId = localStorage.getItem("userId");
+    if (!userId) return { risky: false, triggeredAllergies: [] };
+
+    try {
+        const res = await fetch(
+            `http://localhost:8080/api/scanner/product/${productId}/user/${userId}`
+        );
+        if (!res.ok) throw new Error();
+
+        return await res.json();
+    } catch (err) {
+        console.error("Risk kontrolü başarısız", err);
+        return { risky: false, triggeredAllergies: [] };
+    }
+}
+
+
+
+
+async function logout() {
+
+    const userId = localStorage.getItem("userId");
+
+    if (!userId) {
+        console.log("UserId yok, direkt çıkış");
+        localStorage.clear();
+        window.location.href = "login.html";
+        return;
+    }
+
+    try {
+        console.log("➡️ LOGOUT backend'e gidiyor, userId:", userId);
+
+        const response = await fetch(
+            `http://localhost:8080/api/auth/logout/${userId}`,
+            {
+                method: "POST"
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error("Logout başarısız");
+        }
+
+        console.log("✅ LOGOUT backend başarılı");
+
+    } catch (err) {
+        console.error("❌ Logout hatası:", err);
+    }
+
+    // 🧹 Temizlik
+    localStorage.clear();
+    window.location.href = "login.html";
+}
+
+
+
+
+
+
+
+        async function onConfigChange(config) {
+            render();
+        }
+
+        function mapToCapabilities(config) {
+            return {
+                recolorables: [
+                    {
+                        get: () => config.background_color || defaultConfig.background_color,
+                        set: (value) => {
+                            config.background_color = value;
+                            window.elementSdk.setConfig({ background_color: value });
+                        }
+                    },
+                    {
+                        get: () => config.surface_color || defaultConfig.surface_color,
+                        set: (value) => {
+                            config.surface_color = value;
+                            window.elementSdk.setConfig({ surface_color: value });
+                        }
+                    },
+                    {
+                        get: () => config.accent_color || defaultConfig.accent_color,
+                        set: (value) => {
+                            config.accent_color = value;
+                            window.elementSdk.setConfig({ accent_color: value });
+                        }
+                    },
+                    {
+                        get: () => config.text_color || defaultConfig.text_color,
+                        set: (value) => {
+                            config.text_color = value;
+                            window.elementSdk.setConfig({ text_color: value });
+                        }
+                    },
+                    {
+                        get: () => config.warning_color || defaultConfig.warning_color,
+                        set: (value) => {
+                            config.warning_color = value;
+                            window.elementSdk.setConfig({ warning_color: value });
+                        }
+                    }
+                ],
+                borderables: [],
+                fontEditable: {
+                    get: () => config.font_family || defaultConfig.font_family,
+                    set: (value) => {
+                        config.font_family = value;
+                        window.elementSdk.setConfig({ font_family: value });
+                    }
+                },
+                fontSizeable: {
+                    get: () => config.font_size || defaultConfig.font_size,
+                    set: (value) => {
+                        config.font_size = value;
+                        window.elementSdk.setConfig({ font_size: value });
+                    }
+                }
+            };
+        }
+
+        function mapToEditPanelValues(config) {
+            return new Map([
+                ["app_title", config.app_title || defaultConfig.app_title],
+                ["user_name", config.user_name || defaultConfig.user_name],
+                ["user_email", config.user_email || defaultConfig.user_email]
+            ]);
+        }
+
+        if (window.elementSdk) {
+            window.elementSdk.init({
+                defaultConfig,
+                onConfigChange,
+                mapToCapabilities,
+                mapToEditPanelValues
+            });
+        }
+
+        loadAllergies();
+        loadFavorites();
+
+        render();
+    </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9b238961d4e626ad',t:'MTc2NjQ0NzU4NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html><!doctype html> 
